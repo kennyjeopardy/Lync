@@ -1,1 +1,0 @@
-return "This is a project child module"
