@@ -1013,7 +1013,7 @@ async function mapJsonRecursive(
             // Get release info
             if (DEBUG)
               console.log(
-                `Getting latest version for ${green(localPath.package)} . . .`
+                `Getting latest version for ${green(localPath.package)}...`
               );
             const release = await getAsync(
               `https://api.github.com/repos/${owner}/${repo}/releases/${
@@ -1038,7 +1038,7 @@ async function mapJsonRecursive(
             // Download release asset
             if (!fs.existsSync(assetFile + assetExt)) {
               if (DEBUG)
-                console.log(`Downloading ${green(localPath.package)} . . .`);
+                console.log(`Downloading ${green(localPath.package)}...`);
 
               let matchingAssetInfo;
               if (localPath.type != "repo") {
@@ -1261,7 +1261,7 @@ function runJobs(event, localPath) {
   // Check for updates
 
   if (MODE != "fetch" && CONFIG.AutoUpdate) {
-    console.log("Checking for updates . . .");
+    console.log("Checking for updates...");
     try {
       // Grab latest version info
       let latest = await getAsync(
@@ -1292,7 +1292,7 @@ function runJobs(event, localPath) {
         );
 
         // Download latest version
-        console.log(`Updating to ${green(latest.name)} . . .`);
+        console.log(`Updating to ${green(latest.name)}...`);
         const assetName = `lync-${
           latest.tag_name
         }-${PLATFORM}-${os.arch()}.zip`;
@@ -1366,8 +1366,8 @@ function runJobs(event, localPath) {
 
   // Begin
 
-  console.log("Path:", cyan(process.cwd()));
-  console.log("Args:", ARGS);
+  // console.log("Path:", cyan(process.cwd()));
+  // console.log("Args:", ARGS);
 
   http.globalAgent.maxSockets = 65535;
 
@@ -1375,7 +1375,7 @@ function runJobs(event, localPath) {
 
   await changedJson();
   firstMapped = true;
-  console.log();
+  // console.log();
 
   // Download sources
   if (MODE == "fetch") {
@@ -1383,7 +1383,7 @@ function runJobs(event, localPath) {
       console.log("Nothing to download");
     for (const index in projectJson.sources) {
       const source = projectJson.sources[index];
-      console.log("Fetching source", green(source.name), ". . .");
+      console.log("Fetching source", green(source.name), "...");
       try {
         let contents;
         if (source.type == "GET") {
@@ -1472,7 +1472,7 @@ function runJobs(event, localPath) {
     );
 
     // Write validation script
-    if (DEBUG) console.log("Writing validation script . . .");
+    if (DEBUG) console.log("Writing validation script...");
     let validationScript = fs.readFileSync(
       path.resolve(__dirname, "luneBuildTemplate.luau")
     );
@@ -1487,7 +1487,7 @@ function runJobs(event, localPath) {
     fs.writeFileSync(buildScriptPath, validationScript);
 
     // Validate loadstrings
-    if (DEBUG) console.log("Validating loadstrings . . .");
+    if (DEBUG) console.log("Validating loadstrings...");
     const validationStatus = spawnSync(
       lunePath,
       ["run", `${buildScriptPath}`],
@@ -1513,7 +1513,7 @@ function runJobs(event, localPath) {
     }
 
     // Write build script
-    if (DEBUG) console.log("Writing build script . . .");
+    if (DEBUG) console.log("Writing build script...");
     let buildScript =
       fs.readFileSync(path.resolve(__dirname, "luneBuildTemplate.luau")) +
       `\nworkspace:SetAttribute("__lyncbuildfile", ${projectJson.port})\n` +
@@ -1528,7 +1528,7 @@ function runJobs(event, localPath) {
     fs.writeFileSync(buildScriptPath, buildScript);
 
     // Build RBXL
-    if (DEBUG) console.log("Building RBXL . . .");
+    if (DEBUG) console.log("Building RBXL...");
     const build = spawn(lunePath, ["run", `${buildScriptPath}`], {
       cwd: process.cwd(),
       detached: false,
@@ -1734,7 +1734,7 @@ function runJobs(event, localPath) {
                     localPathStats.isFile() &&
                     mTimes[localPath] != localPathStats.mtimeMs
                   ) {
-                    console.log("M", cyan(localPath));
+                    // console.log("M", cyan(localPath));
                     for (const key in map.tree) {
                       if (
                         localPathIsInit(localPath) &&
