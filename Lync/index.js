@@ -774,14 +774,10 @@ async function mapDirectory(localPath, robloxPath, flag) {
           localPath + "/default.project.json"
         );
 
-        console.log(subProjectJson);
-
         if (subProjectJson.name) {
           const robloxPathParsed = path.parse(robloxPath);
           robloxPath = robloxPathParsed.dir + "/" + subProjectJson.name;
         }
-
-        console.log(robloxPath);
 
         await mapJsonRecursive(
           subProjectJsonPath,
