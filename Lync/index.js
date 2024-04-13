@@ -1824,7 +1824,7 @@ function runJobs(event, localPath) {
 
                 // Modify sourcemap
                 if (
-                  CONFIG.GenerateSourcemap &&
+                  (CONFIG.GenerateSourcemap || MODE == "generate") &&
                   Object.keys(modified_sourcemap).length > 0
                 ) {
                   const startTime = performance.now();
@@ -2181,7 +2181,7 @@ function runJobs(event, localPath) {
       process.exit();
     })
     .listen(projectJson.port, function () {
-      if (MODE != "build")
+      if (MODE != "build" && MODE != "generate")
         console.log(
           `Serving ${green(
             projectJson.name || path.parse(process.cwd()).name
@@ -2190,11 +2190,12 @@ function runJobs(event, localPath) {
 
       // Generate sourcemap
 
-      if (CONFIG.GenerateSourcemap) {
+      if (CONFIG.GenerateSourcemap || MODE == "generate") {
         const startTime = Date.now();
-        if (DEBUG) console.log("Generating", cyan("sourcemap.json"), ". . .");
+        if (DEBUG || MODE == "generate")
+          console.log("Generating", cyan("sourcemap.json"), ". . .");
         generateSourcemap(PROJECT_JSON, map.tree, projectJson);
-        if (DEBUG)
+        if (DEBUG || MODE == "generate")
           console.log(
             "Generated",
             cyan("sourcemap.json"),
