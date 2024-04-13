@@ -1863,352 +1863,358 @@ function runJobs(event, localPath) {
 
   // Start server
 
-  http
-    .createServer(function (req, res) {
-      if (MODE != "build" && MODE != "generate") {
-        if (securityKey == null) {
-          if (!("key" in req.headers)) {
-            const errText = "Missing Key header";
-            console.error(red("Server error:"), yellow(errText));
-            console.log("Headers:", req.headers);
+  if (MODE != "generate") {
+    http
+      .createServer(function (req, res) {
+        if (MODE != "build" && MODE != "generate") {
+          if (securityKey == null) {
+            if (!("key" in req.headers)) {
+              const errText = "Missing Key header";
+              console.error(red("Server error:"), yellow(errText));
+              console.log("Headers:", req.headers);
+              res.writeHead(403);
+              res.end(errText);
+              return;
+            }
+            securityKey = req.headers.key;
+            console.log(
+              `Client connected: ${yellow(req.socket.remoteAddress)}`
+            );
+          } else if (req.headers.key != securityKey) {
+            const errText = `Security key mismatch. The current session will now be terminated. (Key = ${req.headers.key})\nPlease check for any malicious plugins or scripts and try again.`;
+            console.error(red("Terminated:"), yellow(errText));
             res.writeHead(403);
             res.end(errText);
-            return;
+            process.exit();
           }
-          securityKey = req.headers.key;
-          console.log(`Client connected: ${yellow(req.socket.remoteAddress)}`);
-        } else if (req.headers.key != securityKey) {
-          const errText = `Security key mismatch. The current session will now be terminated. (Key = ${req.headers.key})\nPlease check for any malicious plugins or scripts and try again.`;
-          console.error(red("Terminated:"), yellow(errText));
-          res.writeHead(403);
-          res.end(errText);
-          process.exit();
         }
-      }
 
-      switch (req.headers.type) {
-        case "Map":
-          // Create content hard links
+        switch (req.headers.type) {
+          case "Map":
+            // Create content hard links
 
-          hardLinkPaths = [];
-          if (PLATFORM == "windows" || PLATFORM == "linux") {
-            const versionsPath = path.resolve(
-              (PLATFORM == "windows" &&
-                CONFIG.Path_RobloxVersions.replace(
-                  "%LOCALAPPDATA%",
-                  process.env.LOCALAPPDATA
-                )) ||
-                CONFIG.Path_RobloxVersions
-            );
-            fs.readdirSync(versionsPath).forEach((dirNext) => {
-              const stats = fs.statSync(path.resolve(versionsPath, dirNext));
-              if (
-                stats.isDirectory() &&
-                fs.existsSync(
-                  path.resolve(versionsPath, dirNext, "RobloxStudioBeta.exe")
-                )
-              ) {
-                const hardLinkPath = path.resolve(
-                  versionsPath,
-                  dirNext,
-                  "content/lync"
-                );
-                if (!fs.existsSync(hardLinkPath)) {
-                  fs.mkdirSync(hardLinkPath);
-                }
-                hardLinkPaths.push(hardLinkPath);
-              }
-            });
-            if (PLATFORM == "windows") {
-              // Studio Mod Manager
-              const modManagerContentPath = path.resolve(
-                CONFIG.Path_StudioModManagerContent.replace(
-                  "%LOCALAPPDATA%",
-                  process.env.LOCALAPPDATA
-                )
+            hardLinkPaths = [];
+            if (PLATFORM == "windows" || PLATFORM == "linux") {
+              const versionsPath = path.resolve(
+                (PLATFORM == "windows" &&
+                  CONFIG.Path_RobloxVersions.replace(
+                    "%LOCALAPPDATA%",
+                    process.env.LOCALAPPDATA
+                  )) ||
+                  CONFIG.Path_RobloxVersions
               );
-              if (fs.existsSync(modManagerContentPath)) {
-                const hardLinkPath = path.resolve(
-                  modManagerContentPath,
-                  "lync"
-                );
-                if (!fs.existsSync(hardLinkPath)) {
-                  fs.mkdirSync(hardLinkPath);
-                }
-                hardLinkPaths.push(hardLinkPath);
-              }
-            }
-          } else if (PLATFORM == "macos") {
-            const contentPath = path.resolve(CONFIG.Path_RobloxContent);
-            const hardLinkPath = path.resolve(contentPath, "lync");
-            if (!fs.existsSync(hardLinkPath)) {
-              fs.mkdirSync(hardLinkPath);
-            }
-            hardLinkPaths.push(hardLinkPath);
-          }
-          for (const hardLinkPath of hardLinkPaths) {
-            hardLinkRecursive(process.cwd(), hardLinkPath);
-          }
-
-          // Send map
-          const mapJsonString = JSON.stringify(map);
-          if ("playtest" in req.headers) {
-            modified_playtest = {};
-          } else {
-            modified = {};
-          }
-          res.writeHead(200);
-          res.end(mapJsonString);
-          break;
-
-        case "Modified":
-          let modifiedJsonString;
-          if ("playtest" in req.headers) {
-            modifiedJsonString = JSON.stringify(modified_playtest);
-            modified_playtest = {};
-          } else {
-            modifiedJsonString = JSON.stringify(modified);
-            modified = {};
-          }
-          res.writeHead(200);
-          res.end(modifiedJsonString);
-          break;
-
-        case "Source":
-          try {
-            let read = fs.readFileSync(req.headers.path, { encoding: "utf8" });
-
-            // Parse JSON
-            if (req.headers.datatype == "JSON") {
-              const json = validateJson(null, req.headers.path, read);
-              if (json)
-                read = LUA.format(json, { singleQuote: false, spaces: "\t" });
-
-              // Convert YAML to JSON
-            } else if (req.headers.datatype == "YAML") {
-              const yaml = validateYaml(null, req.headers.path, read);
-              if (yaml)
-                read = LUA.format(yaml, { singleQuote: false, spaces: "\t" });
-
-              // Convert TOML to JSON
-            } else if (req.headers.datatype == "TOML") {
-              const toml = validateToml(null, req.headers.path, read);
-              if (toml)
-                read = LUA.format(toml, { singleQuote: false, spaces: "\t" });
-
-              // Read and convert Excel Tables to JSON
-            } else if (req.headers.datatype == "Excel") {
-              let tableDefinitions = validateJson(
-                "Excel",
-                req.headers.path,
-                read
-              );
-              if (tableDefinitions) {
-                const excelFilePath = path.resolve(
-                  req.headers.path,
-                  "..",
-                  tableDefinitions.spreadsheet
-                );
-
-                if (!fs.existsSync(excelFilePath)) {
-                  console.error(
-                    fileError(excelFilePath),
-                    yellow("Excel file does not exist")
+              fs.readdirSync(versionsPath).forEach((dirNext) => {
+                const stats = fs.statSync(path.resolve(versionsPath, dirNext));
+                if (
+                  stats.isDirectory() &&
+                  fs.existsSync(
+                    path.resolve(versionsPath, dirNext, "RobloxStudioBeta.exe")
+                  )
+                ) {
+                  const hardLinkPath = path.resolve(
+                    versionsPath,
+                    dirNext,
+                    "content/lync"
                   );
-                } else {
-                  const excelFile = XLSX.readFile(excelFilePath);
-
-                  // Convert Excel 'Defined Name' to 'Ref'
-                  for (const definedName of excelFile.Workbook.Names) {
-                    if (definedName.Name == tableDefinitions.ref) {
-                      tableDefinitions.ref = definedName.Ref;
-                      break;
-                    }
+                  if (!fs.existsSync(hardLinkPath)) {
+                    fs.mkdirSync(hardLinkPath);
                   }
+                  hardLinkPaths.push(hardLinkPath);
+                }
+              });
+              if (PLATFORM == "windows") {
+                // Studio Mod Manager
+                const modManagerContentPath = path.resolve(
+                  CONFIG.Path_StudioModManagerContent.replace(
+                    "%LOCALAPPDATA%",
+                    process.env.LOCALAPPDATA
+                  )
+                );
+                if (fs.existsSync(modManagerContentPath)) {
+                  const hardLinkPath = path.resolve(
+                    modManagerContentPath,
+                    "lync"
+                  );
+                  if (!fs.existsSync(hardLinkPath)) {
+                    fs.mkdirSync(hardLinkPath);
+                  }
+                  hardLinkPaths.push(hardLinkPath);
+                }
+              }
+            } else if (PLATFORM == "macos") {
+              const contentPath = path.resolve(CONFIG.Path_RobloxContent);
+              const hardLinkPath = path.resolve(contentPath, "lync");
+              if (!fs.existsSync(hardLinkPath)) {
+                fs.mkdirSync(hardLinkPath);
+              }
+              hardLinkPaths.push(hardLinkPath);
+            }
+            for (const hardLinkPath of hardLinkPaths) {
+              hardLinkRecursive(process.cwd(), hardLinkPath);
+            }
 
-                  // Find current sheet and range to read from
-                  let sheet;
-                  let range;
-                  if (tableDefinitions.ref.includes("!")) {
-                    const ref = tableDefinitions.ref.split("!");
-                    sheet =
-                      excelFile.Sheets[
-                        ref[0].replace("=", "").replaceAll("'", "")
-                      ];
-                    range = XLSX.utils.decode_range(ref[1]);
-                  } else {
-                    sheet = excelFile.Sheets[excelFile.SheetNames[0]];
-                    range = XLSX.utils.decode_range(
-                      tableDefinitions.ref.replace("=", "")
+            // Send map
+            const mapJsonString = JSON.stringify(map);
+            if ("playtest" in req.headers) {
+              modified_playtest = {};
+            } else {
+              modified = {};
+            }
+            res.writeHead(200);
+            res.end(mapJsonString);
+            break;
+
+          case "Modified":
+            let modifiedJsonString;
+            if ("playtest" in req.headers) {
+              modifiedJsonString = JSON.stringify(modified_playtest);
+              modified_playtest = {};
+            } else {
+              modifiedJsonString = JSON.stringify(modified);
+              modified = {};
+            }
+            res.writeHead(200);
+            res.end(modifiedJsonString);
+            break;
+
+          case "Source":
+            try {
+              let read = fs.readFileSync(req.headers.path, {
+                encoding: "utf8",
+              });
+
+              // Parse JSON
+              if (req.headers.datatype == "JSON") {
+                const json = validateJson(null, req.headers.path, read);
+                if (json)
+                  read = LUA.format(json, { singleQuote: false, spaces: "\t" });
+
+                // Convert YAML to JSON
+              } else if (req.headers.datatype == "YAML") {
+                const yaml = validateYaml(null, req.headers.path, read);
+                if (yaml)
+                  read = LUA.format(yaml, { singleQuote: false, spaces: "\t" });
+
+                // Convert TOML to JSON
+              } else if (req.headers.datatype == "TOML") {
+                const toml = validateToml(null, req.headers.path, read);
+                if (toml)
+                  read = LUA.format(toml, { singleQuote: false, spaces: "\t" });
+
+                // Read and convert Excel Tables to JSON
+              } else if (req.headers.datatype == "Excel") {
+                let tableDefinitions = validateJson(
+                  "Excel",
+                  req.headers.path,
+                  read
+                );
+                if (tableDefinitions) {
+                  const excelFilePath = path.resolve(
+                    req.headers.path,
+                    "..",
+                    tableDefinitions.spreadsheet
+                  );
+
+                  if (!fs.existsSync(excelFilePath)) {
+                    console.error(
+                      fileError(excelFilePath),
+                      yellow("Excel file does not exist")
                     );
-                  }
+                  } else {
+                    const excelFile = XLSX.readFile(excelFilePath);
 
-                  // Convert cells to dict
-                  const sheetJson = XLSX.utils.sheet_to_json(sheet, {
-                    range: range,
-                    header: 1,
-                    defval: null,
-                  });
-                  const entries =
-                    (tableDefinitions.numColumnKeys > 0 && {}) || [];
-                  const startRow = (tableDefinitions.hasHeader && 1) || 0;
-                  const startColumn = tableDefinitions.numColumnKeys;
-                  const header = sheetJson[0];
-                  for (let row = startRow; row < sheetJson.length; row++) {
-                    for (
-                      let column = startColumn;
-                      column < header.length;
-                      column++
-                    ) {
-                      const key =
-                        (tableDefinitions.hasHeader && header[column]) ||
-                        column - startColumn;
-                      let target = entries;
-                      if (tableDefinitions.numColumnKeys > 0) {
-                        for (
-                          let columnKeyIndex = 0;
-                          columnKeyIndex < tableDefinitions.numColumnKeys;
-                          columnKeyIndex++
-                        ) {
-                          const columnKey = sheetJson[row][columnKeyIndex];
-                          if (!columnKey) {
-                            target = null;
-                            break;
+                    // Convert Excel 'Defined Name' to 'Ref'
+                    for (const definedName of excelFile.Workbook.Names) {
+                      if (definedName.Name == tableDefinitions.ref) {
+                        tableDefinitions.ref = definedName.Ref;
+                        break;
+                      }
+                    }
+
+                    // Find current sheet and range to read from
+                    let sheet;
+                    let range;
+                    if (tableDefinitions.ref.includes("!")) {
+                      const ref = tableDefinitions.ref.split("!");
+                      sheet =
+                        excelFile.Sheets[
+                          ref[0].replace("=", "").replaceAll("'", "")
+                        ];
+                      range = XLSX.utils.decode_range(ref[1]);
+                    } else {
+                      sheet = excelFile.Sheets[excelFile.SheetNames[0]];
+                      range = XLSX.utils.decode_range(
+                        tableDefinitions.ref.replace("=", "")
+                      );
+                    }
+
+                    // Convert cells to dict
+                    const sheetJson = XLSX.utils.sheet_to_json(sheet, {
+                      range: range,
+                      header: 1,
+                      defval: null,
+                    });
+                    const entries =
+                      (tableDefinitions.numColumnKeys > 0 && {}) || [];
+                    const startRow = (tableDefinitions.hasHeader && 1) || 0;
+                    const startColumn = tableDefinitions.numColumnKeys;
+                    const header = sheetJson[0];
+                    for (let row = startRow; row < sheetJson.length; row++) {
+                      for (
+                        let column = startColumn;
+                        column < header.length;
+                        column++
+                      ) {
+                        const key =
+                          (tableDefinitions.hasHeader && header[column]) ||
+                          column - startColumn;
+                        let target = entries;
+                        if (tableDefinitions.numColumnKeys > 0) {
+                          for (
+                            let columnKeyIndex = 0;
+                            columnKeyIndex < tableDefinitions.numColumnKeys;
+                            columnKeyIndex++
+                          ) {
+                            const columnKey = sheetJson[row][columnKeyIndex];
+                            if (!columnKey) {
+                              target = null;
+                              break;
+                            }
+                            if (!(columnKey in target)) {
+                              target[columnKey] =
+                                (tableDefinitions.hasHeader && {}) || [];
+                            }
+                            target = target[columnKey];
                           }
-                          if (!(columnKey in target)) {
-                            target[columnKey] =
+                        } else {
+                          const indexKey = row - startRow;
+                          if (!target[indexKey]) {
+                            target[indexKey] =
                               (tableDefinitions.hasHeader && {}) || [];
                           }
-                          target = target[columnKey];
+                          target = target[indexKey];
                         }
-                      } else {
-                        const indexKey = row - startRow;
-                        if (!target[indexKey]) {
-                          target[indexKey] =
-                            (tableDefinitions.hasHeader && {}) || [];
-                        }
-                        target = target[indexKey];
+                        if (target) target[key] = sheetJson[row][column];
                       }
-                      if (target) target[key] = sheetJson[row][column];
+                    }
+                    read = LUA.format(entries, {
+                      singleQuote: false,
+                      spaces: "\t",
+                    });
+                  }
+                }
+
+                // Convert Localization CSV to JSON
+              } else if (req.headers.datatype == "Localization") {
+                let entries = [];
+                const csv = parseCSV(read);
+                for (let index = 0; index < csv.length; index++) {
+                  const entry = csv[index];
+                  const values = {};
+                  for (const key in entry) {
+                    switch (key) {
+                      case "Key":
+                      case "Source":
+                      case "Context":
+                      case "Example":
+                        break;
+                      default:
+                        values[key] = entry[key];
                     }
                   }
-                  read = LUA.format(entries, {
-                    singleQuote: false,
-                    spaces: "\t",
+                  entries.push({
+                    Key: entry.Key,
+                    Source: entry.Source,
+                    Context: entry.Context,
+                    Example: entry.Example,
+                    Values: values,
                   });
                 }
+                read = JSON.stringify(entries);
               }
 
-              // Convert Localization CSV to JSON
-            } else if (req.headers.datatype == "Localization") {
-              let entries = [];
-              const csv = parseCSV(read);
-              for (let index = 0; index < csv.length; index++) {
-                const entry = csv[index];
-                const values = {};
-                for (const key in entry) {
-                  switch (key) {
-                    case "Key":
-                    case "Source":
-                    case "Context":
-                    case "Example":
-                      break;
-                    default:
-                      values[key] = entry[key];
-                  }
-                }
-                entries.push({
-                  Key: entry.Key,
-                  Source: entry.Source,
-                  Context: entry.Context,
-                  Example: entry.Example,
-                  Values: values,
-                });
-              }
-              read = JSON.stringify(entries);
-            }
-
-            res.writeHead(200);
-            res.end(read);
-          } catch (err) {
-            console.error(red("Server error:"), err);
-            res.writeHead(500);
-            res.end(err.toString());
-          }
-          break;
-
-        case "ReverseSync":
-          const workingDir = process.cwd();
-          if (
-            path.resolve(req.headers.path).substring(0, workingDir.length) !=
-            workingDir
-          ) {
-            res.writeHead(403);
-            res.end("File not located in project directory");
-            break;
-          }
-          const localPathExt = path.parse(req.headers.path).ext.toLowerCase();
-          if (
-            localPathExt != ".lua" &&
-            localPathExt != ".luau" &&
-            localPathExt != ".json"
-          ) {
-            res.writeHead(403);
-            res.end("File extension must be lua, luau, or json");
-            break;
-          }
-          let data = [];
-          req.on("data", (chunk) => {
-            data.push(chunk);
-          });
-          req.on("end", () => {
-            try {
-              let buffer = Buffer.concat(data);
-              fs.writeFileSync(req.headers.path, buffer.toString());
               res.writeHead(200);
-              res.end();
+              res.end(read);
             } catch (err) {
               console.error(red("Server error:"), err);
-              res.writeHead(400);
+              res.writeHead(500);
               res.end(err.toString());
             }
-          });
-          break;
+            break;
 
-        case "Resume":
-          res.writeHead(200);
-          res.end();
-          break;
+          case "ReverseSync":
+            const workingDir = process.cwd();
+            if (
+              path.resolve(req.headers.path).substring(0, workingDir.length) !=
+              workingDir
+            ) {
+              res.writeHead(403);
+              res.end("File not located in project directory");
+              break;
+            }
+            const localPathExt = path.parse(req.headers.path).ext.toLowerCase();
+            if (
+              localPathExt != ".lua" &&
+              localPathExt != ".luau" &&
+              localPathExt != ".json"
+            ) {
+              res.writeHead(403);
+              res.end("File extension must be lua, luau, or json");
+              break;
+            }
+            let data = [];
+            req.on("data", (chunk) => {
+              data.push(chunk);
+            });
+            req.on("end", () => {
+              try {
+                let buffer = Buffer.concat(data);
+                fs.writeFileSync(req.headers.path, buffer.toString());
+                res.writeHead(200);
+                res.end();
+              } catch (err) {
+                console.error(red("Server error:"), err);
+                res.writeHead(400);
+                res.end(err.toString());
+              }
+            });
+            break;
 
-        default:
-          res.writeHead(400);
-          res.end("Missing / invalid type header");
-      }
-    })
-    .on("error", function (err) {
-      console.error(red("Terminated: Server error:"), err);
-      process.exit();
-    })
-    .listen(projectJson.port, function () {
-      if (MODE != "build" && MODE != "generate")
-        console.log(
-          `Serving ${green(
-            projectJson.name || path.parse(process.cwd()).name
-          )} on port ${yellow(projectJson.port)}`
-        );
+          case "Resume":
+            res.writeHead(200);
+            res.end();
+            break;
 
-      // Generate sourcemap
-
-      if (CONFIG.GenerateSourcemap || MODE == "generate") {
-        const startTime = performance.now();
-        generateSourcemap(PROJECT_JSON, map.tree, projectJson);
-        if (DEBUG || MODE == "generate")
+          default:
+            res.writeHead(400);
+            res.end("Missing / invalid type header");
+        }
+      })
+      .on("error", function (err) {
+        console.error(red("Terminated: Server error:"), err);
+        process.exit();
+      })
+      .listen(projectJson.port, function () {
+        if (MODE != "build" && MODE != "generate")
           console.log(
-            "Generated",
-            cyan("sourcemap.json", true),
-            "(in " + (performance.now() - startTime).toFixed(3) + "ms)"
+            `Serving ${green(
+              projectJson.name || path.parse(process.cwd()).name
+            )} on port ${yellow(projectJson.port)}`
           );
-        modified_sourcemap = {};
-      }
-    });
+      });
+  }
+
+  // Generate sourcemap
+
+  if (CONFIG.GenerateSourcemap || MODE == "generate") {
+    const startTime = performance.now();
+    generateSourcemap(PROJECT_JSON, map.tree, projectJson);
+    if (DEBUG || MODE == "generate")
+      console.log(
+        "Generated",
+        cyan("sourcemap.json", true),
+        "(in " + (performance.now() - startTime).toFixed(3) + "ms)"
+      );
+    modified_sourcemap = {};
+  }
 })();
