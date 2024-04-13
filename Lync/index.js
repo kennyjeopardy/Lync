@@ -380,6 +380,7 @@ function assignMap(robloxPath, mapDetails, mtimeMs) {
       mapDetails.ProjectJson = map.tree[robloxPath].ProjectJson;
     }
   }
+
   map.tree[robloxPath] = mapDetails;
   modified[robloxPath] = mapDetails;
   modified_playtest[robloxPath] = mapDetails;
@@ -630,12 +631,14 @@ async function mapDirectory(localPath, robloxPath, flag) {
             localPath,
             fs.readFileSync(localPath, { encoding: "utf-8" })
           );
+
           if (subProjectJson) {
             const parentPathString = path
               .relative(process.cwd(), path.resolve(localPath, ".."))
               .replace(/\\/g, "/");
             const externalPackageAppend =
               (parentPathString != "" && parentPathString + "/") || "";
+
             await mapJsonRecursive(
               localPath,
               subProjectJson,
@@ -770,6 +773,16 @@ async function mapDirectory(localPath, robloxPath, flag) {
         const subProjectJsonStats = fs.statSync(
           localPath + "/default.project.json"
         );
+
+        console.log(subProjectJson);
+
+        if (subProjectJson.name) {
+          const robloxPathParsed = path.parse(robloxPath);
+          robloxPath = robloxPathParsed.dir + "/" + subProjectJson.name;
+        }
+
+        console.log(robloxPath);
+
         await mapJsonRecursive(
           subProjectJsonPath,
           subProjectJson,
@@ -2191,17 +2204,13 @@ function runJobs(event, localPath) {
       // Generate sourcemap
 
       if (CONFIG.GenerateSourcemap || MODE == "generate") {
-        const startTime = Date.now();
-        if (DEBUG || MODE == "generate")
-          console.log("Generating", cyan("sourcemap.json"), ". . .");
+        const startTime = performance.now();
         generateSourcemap(PROJECT_JSON, map.tree, projectJson);
         if (DEBUG || MODE == "generate")
           console.log(
             "Generated",
-            cyan("sourcemap.json"),
-            "in",
-            (Date.now() - startTime) / 1000,
-            "seconds"
+            cyan("sourcemap.json", true),
+            "(in " + (performance.now() - startTime).toFixed(3) + "ms)"
           );
         modified_sourcemap = {};
       }
