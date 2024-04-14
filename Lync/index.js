@@ -478,22 +478,12 @@ function mapLua(
     localPathLower.endsWith(".server.lua") ||
     localPathLower.endsWith(".server.luau")
   ) {
-    console.error(
-      fileError(localPath),
-      yellow("Unsupported file name; must add"),
-      green("--@script"),
-      yellow("directive to the beginning of the file")
-    );
+    context = "Server";
   } else if (
     localPathLower.endsWith(".client.lua") ||
     localPathLower.endsWith(".client.luau")
   ) {
-    console.error(
-      fileError(localPath),
-      yellow("Unsupported file name; must add"),
-      green("--@localscript"),
-      yellow("directive to the beginning of the file")
-    );
+    context = "Client";
   }
 
   assignMap(
