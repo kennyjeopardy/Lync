@@ -1405,6 +1405,8 @@ then
 		warn("[Lync] - Playtest Sync is active.")
 	end
 	if workspace:GetAttribute("__lyncbuildfile") then
+		warn("[Lync] - Setting port to " .. workspace:GetAttribute("__lyncbuildfile"))
+		plugin:SetSetting("Lync_Port", workspace:GetAttribute("__lyncbuildfile"))
 		portTextBox.Text = ""
 		portTextBox.PlaceholderText = workspace:GetAttribute("__lyncbuildfile")
 		portTextBox.TextEditable = false
